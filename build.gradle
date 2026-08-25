@@ -1,0 +1,63 @@
+// Waypoint Guide - 基于 Architectury 的 Forge 模组
+plugins {
+    id 'architectury-plugin' version '3.4-SNAPSHOT'
+    id 'dev.architectury.loom' version '1.6-SNAPSHOT' apply false
+}
+
+architectury {
+    minecraft = '1.20.1'
+}
+
+allprojects {
+    apply plugin: 'java'
+    apply plugin: 'architectury-plugin'
+
+    group = maven_group
+    version = '1.0.0'
+
+    repositories {
+        maven { url = 'https://maven.architectury.dev/' }
+        maven { url = 'https://maven.minecraftforge.net/' }
+        maven { url = 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        maven { url = 'https://maven.aliyun.com/repository/public/' }
+        maven { url = 'https://repo.huaweicloud.com/repository/maven/' }
+        mavenCentral()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 17
+    }
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+        withSourcesJar()
+    }
+
+    // 强制所有 JavaExec 使用 Java 17 launcher，保证开发运行环境一致
+    tasks.withType(JavaExec).configureEach {
+        javaLauncher = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+        systemProperty 'minecraft.username', rootProject.properties.getOrDefault('minecraft_username', 'Player')
+    }
+}
+
+subprojects {
+    apply plugin: 'dev.architectury.loom'
+
+    base {
+        archivesName = "${rootProject.name}-${project.name}"
+    }
+
+    loom {
+        silentMojangMappingsLicense()
+    }
+
+    dependencies {
+        minecraft "com.mojang:minecraft:1.20.1"
+        mappings loom.officialMojangMappings()
+    }
+}

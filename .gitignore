@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+run/
+logs/
+*.log
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.code-workspace
+
+# Java
+bin/
+out/
+*.class
+local.properties
+gradle-local.properties
+
+# Architectury
+**/.architectury-transformer/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini

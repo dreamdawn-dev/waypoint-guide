@@ -1,0 +1,116 @@
+plugins {
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+architectury {
+    platformSetupLoomIde()
+    forge()
+}
+
+loom {
+    runs {
+        client {
+            client()
+            name "Waypoint Guide Client"
+            runDir "run/client"
+            programArgs "--username", "Player1"
+        }
+        server {
+            server()
+            name "Waypoint Guide Server"
+            runDir "run/server"
+        }
+    }
+}
+
+configurations {
+    common
+    shadowCommon // Don't use shadow from the shadow plugin since it conflicts with Loom.
+    compileClasspath.extendsFrom common
+    runtimeClasspath.extendsFrom common
+    developmentForge.extendsFrom common
+}
+
+shadowJar {
+    exclude "architectury.common.json"
+    configurations = [project.configurations.shadowCommon]
+    archiveClassifier.set("dev-shadow")
+
+    exclude 'META-INF/versions/**'
+    mergeServiceFiles()
+    exclude 'module-info.class'
+}
+
+remapJar {
+    inputFile.set shadowJar.archiveFile
+    dependsOn shadowJar
+}
+
+jar {
+    archiveClassifier.set("dev")
+    from("${rootProject.projectDir}/LICENSE") {
+        rename { "${it}_${base.archivesName.get()}" }
+    }
+
+    manifest {
+        attributes([
+            'Specification-Title'   : 'Waypoint Guide',
+            'Specification-Vendor'  : 'DreamDawn',
+            'Specification-Version' : '1',
+            'Implementation-Title'  : project.name,
+            'Implementation-Version': project.version,
+            'Implementation-Vendor' : 'DreamDawn'
+        ])
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven {
+        url "https://maven.minecraftforge.net/"
+        name "Forge"
+    }
+    maven {
+        url "https://maven.architectury.dev/"
+        name "Architectury"
+    }
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    def replaceProperties = [
+        mod_id         : 'waypointguide',
+        mod_name       : 'Waypoint Guide',
+        mod_version    : project.version,
+        mod_authors    : 'DreamDawn',
+        mod_description: 'RPG-style waypoint marking and guidance system. Add custom markers with colors, see on-screen indicators and off-screen arrows.'
+    ]
+
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml']) {
+        expand replaceProperties
+    }
+}
+
+dependencies {
+    // Common 模块 - 添加源代码到编译路径
+    common(project(path: ":common", configuration: "namedElements")) { transitive false }
+    shadowCommon(project(path: ":common", configuration: "namedElements")) { transitive false }
+
+    // Forge 平台
+    forge "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+}
+
+// Source JAR 组装（合并 common 源码）
+sourcesJar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    def commonSources = project(":common").sourcesJar
+    dependsOn commonSources
+    from commonSources.archiveFile.map { zipTree(it) }
+}
+
+components.java {
+    withVariantsFromConfiguration(project.configurations.shadowRuntimeElements) {
+        skip()
+    }
+}

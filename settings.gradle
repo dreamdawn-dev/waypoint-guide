@@ -1,0 +1,49 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven {
+            name = 'Architectury'
+            url = 'https://maven.architectury.dev/'
+        }
+        maven {
+            name = 'Forge'
+            url = 'https://maven.minecraftforge.net/'
+        }
+        maven {
+            name = 'Fabric'
+            url = 'https://maven.fabricmc.net/'
+        }
+        mavenCentral()
+        maven { url = 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        maven { url = 'https://maven.aliyun.com/repository/public/' }
+        maven { url = 'https://repo.huaweicloud.com/repository/maven/' }
+    }
+}
+
+dependencyResolutionManagement {
+    repositories {
+        maven { url = 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/' }
+        maven { url = 'https://maven.aliyun.com/repository/public/' }
+        maven { url = 'https://repo.huaweicloud.com/repository/maven/' }
+        mavenCentral()
+        maven { url = 'https://maven.fabricmc.net/' }
+        maven { url = 'https://maven.minecraftforge.net/' }
+
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = 'Forge'
+                    url = 'https://maven.minecraftforge.net/'
+                }
+            }
+            filter {
+                includeGroup 'net.minecraftforge'
+                includeGroupByRegex 'net\\.minecraftforge\\..*'
+            }
+        }
+    }
+}
+
+rootProject.name = 'waypointguide'
+include 'common'
+include 'forge'

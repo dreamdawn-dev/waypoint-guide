@@ -1,0 +1,25 @@
+# Forge Mods.toml
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "GPL-3.0"
+
+[[mods]]
+modId = "waypointguide"
+version = "${mod_version}"
+displayName = "${mod_name}"
+authors = "${mod_authors}"
+description = '''${mod_description}'''
+
+[[dependencies.waypointguide]]
+modId = "forge"
+mandatory = true
+versionRange = "[47,48)"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.waypointguide]]
+modId = "minecraft"
+mandatory = true
+versionRange = "[1.20.1,1.21)"
+ordering = "NONE"
+side = "BOTH"
