@@ -53,7 +53,3 @@ WaypointRightClick('123', event => {
 ## 许可证
 
 本项目采用 [GNU General Public License v3.0](LICENSE) 开源协议。
-
-## 链接
-
-- GitHub: [dreamdawn-dev/waypoint-guide](https://github.com/dreamdawn-dev/waypoint-guide)
