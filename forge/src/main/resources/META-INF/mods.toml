@@ -7,7 +7,6 @@ license = "GPL-3.0"
 modId = "waypointguide"
 version = "${mod_version}"
 displayName = "${mod_name}"
-logoFile = "logo.png"
 authors = "${mod_authors}"
 description = '''${mod_description}'''
 
