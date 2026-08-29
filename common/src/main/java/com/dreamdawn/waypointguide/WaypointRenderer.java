@@ -75,6 +75,17 @@ public final class WaypointRenderer {
 
     private WaypointRenderer() {}
 
+    /** 离开世界/退出登录时清空全部瞬时动画状态，避免旧标记在重进后被误判为移除并触发消失动画 */
+    public static void onWorldLeave() {
+        dismissAnimations.clear();
+        visibilityProgress.clear();
+        animatedSizes.clear();
+        arrowAnimations.clear();
+        crosshairScales.clear();
+        lastOffScreen.clear();
+        currentCrosshairWps.clear();
+    }
+
     public static void render(GuiGraphics graphics, float partialTick) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return;
