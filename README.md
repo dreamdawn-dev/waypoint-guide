@@ -45,7 +45,7 @@ global.WaypointRightClick = (waypointId, callback) => {
   })
 }
 // 调用示例 ID为字符串
-WaypointRightClick('123', event => {
+global.WaypointRightClick('123', event => {
   console.log('右键点击了标记 123')
 })
 ```
