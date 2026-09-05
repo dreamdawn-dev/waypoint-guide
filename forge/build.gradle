@@ -25,7 +25,7 @@ loom {
 
 configurations {
     common
-    shadowCommon // Don't use shadow from the shadow plugin since it conflicts with Loom.
+    shadowCommon // 不要使用 shadow 插件自带的 shadow，因为它与 Loom 冲突
     compileClasspath.extendsFrom common
     runtimeClasspath.extendsFrom common
     developmentForge.extendsFrom common
