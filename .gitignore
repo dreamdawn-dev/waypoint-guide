@@ -17,6 +17,7 @@ logs/
 bin/
 out/
 *.class
+*.hprof
 local.properties
 gradle-local.properties
 

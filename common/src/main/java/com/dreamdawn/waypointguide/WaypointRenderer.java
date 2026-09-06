@@ -38,6 +38,8 @@ public final class WaypointRenderer {
     private static final float DISMISS_MAX_SCALE = 1.3f;
     private static final float DISMISS_GROW_PHASE = 0.3f;
     private static final float DISMISS_CLICK_RANGE = 5.0f;
+    // alpha 低于该值时跳过绘制：Font 会把 alpha<4 的颜色强制按不透明渲染，跳过可避免消失动画末尾文字闪烁
+    private static final float DISMISS_ALPHA_CUTOFF = 0.02f;
 
     private static final Map<String, Float> animatedSizes = new HashMap<>();
     private static final Map<String, Float> arrowAnimations = new HashMap<>();
@@ -50,15 +52,22 @@ public final class WaypointRenderer {
         final Waypoint waypoint;
         final float startTime;
         final float distance;
+        /** 移除瞬间的实际渲染状态：基础尺寸（含距离档位插值）、准星悬停缩放、可见距离淡入淡出进度 */
+        final float baseSize;
+        final float crosshairScale;
+        final float progress;
         boolean particlesSpawned;
         float lastScreenX;
         float lastScreenY;
         boolean hasLastScreen;
 
-        DismissAnimation(Waypoint wp, float startTime, float distance) {
+        DismissAnimation(Waypoint wp, float startTime, float distance, float baseSize, float crosshairScale, float progress) {
             this.waypoint = wp;
             this.startTime = startTime;
             this.distance = distance;
+            this.baseSize = baseSize;
+            this.crosshairScale = crosshairScale;
+            this.progress = progress;
             this.particlesSpawned = false;
             this.hasLastScreen = false;
         }
@@ -127,9 +136,10 @@ public final class WaypointRenderer {
         Font font = mc.font;
 
         for (Waypoint wp : wps) {
-            if (!wp.getDimension().equals(currentDim)) continue;
+            // 同 ID 标点被重新添加时立即取消残留的消失动画，避免新标点在旧动画播完前不可见
+            dismissAnimations.remove(wp.getId());
 
-            if (dismissAnimations.containsKey(wp.getId())) continue;
+            if (!wp.getDimension().equals(currentDim)) continue;
 
             Vec3 rel = new Vec3(wp.getX() - camPos.x, wp.getY() - camPos.y, wp.getZ() - camPos.z);
 
@@ -305,6 +315,23 @@ public final class WaypointRenderer {
         for (Map.Entry<String, DismissAnimation> entry : new ArrayList<>(dismissAnimations.entrySet())) {
             DismissAnimation dismissAnim = entry.getValue();
             Waypoint wp = dismissAnim.waypoint;
+
+            // 时间推进与清理不依赖维度/可见性，保证切换维度等情况下残留动画也能正常结束回收
+            if (smoothTime - dismissAnim.startTime >= 20.0f * DISMISS_DURATION) {
+                if (!dismissAnim.particlesSpawned) {
+                    dismissAnim.particlesSpawned = true;
+                    // 粒子按标记所属维度的世界坐标生成，玩家不在该维度时跳过
+                    if (wp.getDimension().equals(currentDim)) {
+                        spawnDismissParticles(wp);
+                    }
+                }
+                dismissAnimations.remove(entry.getKey());
+                continue;
+            }
+
+            // 消失动画只在标记所属的维度内渲染
+            if (!wp.getDimension().equals(currentDim)) continue;
+
             Vec3 rel = new Vec3(wp.getX() - camPos.x, wp.getY() - camPos.y, wp.getZ() - camPos.z);
             double camXD = -(rel.x * leftVec.x() + rel.y * leftVec.y() + rel.z * leftVec.z());
             double camYD = rel.x * upVec.x() + rel.y * upVec.y() + rel.z * upVec.z();
@@ -323,8 +350,8 @@ public final class WaypointRenderer {
                 drawX = dismissAnim.lastScreenX;
                 drawY = dismissAnim.lastScreenY;
             } else {
-                drawX = (float) screenW / 2.0f;
-                drawY = (float) screenH / 2.0f;
+                // 标点从未获得过有效屏幕位置（始终在摄像机身后），不凭空画在屏幕中心
+                continue;
             }
             float floatOffset = (float) (Math.sin(smoothTime / FLOAT_PERIOD * Math.PI * 2.0) * FLOAT_AMPLITUDE);
             renderDismissAnimation(graphics, dismissAnim, smoothTime, font, wp, drawX, drawY + floatOffset);
@@ -515,28 +542,24 @@ public final class WaypointRenderer {
         float elapsed = currentTime - anim.startTime;
         float t = Math.min(elapsed / 20.0f / DISMISS_DURATION, 1.0f);
 
-        float scale;
-        float alpha;
+        float scaleCurve;
+        float alphaCurve;
         if (t < DISMISS_GROW_PHASE) {
             float p = t / DISMISS_GROW_PHASE;
             float easeOut = 1.0f - (1.0f - p) * (1.0f - p) * (1.0f - p);
-            scale = 1.0f + (DISMISS_MAX_SCALE - 1.0f) * easeOut;
-            alpha = 1.0f;
+            scaleCurve = 1.0f + (DISMISS_MAX_SCALE - 1.0f) * easeOut;
+            alphaCurve = 1.0f;
         } else {
             float p = (t - DISMISS_GROW_PHASE) / (1.0f - DISMISS_GROW_PHASE);
             float easeIn = p * p * p;
-            scale = DISMISS_MAX_SCALE * (1.0f - easeIn);
-            alpha = 1.0f - p * p;
+            scaleCurve = DISMISS_MAX_SCALE * (1.0f - easeIn);
+            alphaCurve = 1.0f - p * p;
         }
 
-        if (t >= 1.0f) {
-            if (!anim.particlesSpawned) {
-                spawnDismissParticles(anim.waypoint);
-                anim.particlesSpawned = true;
-            }
-            dismissAnimations.remove(anim.waypoint.getId());
-            return;
-        }
+        // 从移除瞬间的实际渲染状态（基础尺寸 x 准星缩放 x 淡入淡出进度）继续播放，保证第一帧与删除前完全一致
+        float alpha = anim.progress * alphaCurve;
+        float halfSize = anim.baseSize * 0.5f * anim.crosshairScale * anim.progress * scaleCurve;
+        if (alpha <= DISMISS_ALPHA_CUTOFF || halfSize <= 0.05f) return;
 
         int color = wp.getColor();
         int a = (color >> 24) & 0xFF;
@@ -554,13 +577,6 @@ public final class WaypointRenderer {
 
         int fadedDistColor = ((int)(0xBB * alpha) << 24) | (0xBB << 16) | (0xBB << 8) | 0xBB;
 
-        PoseStack poseStack = graphics.pose();
-        poseStack.pushPose();
-        poseStack.translate(drawX, drawY, 0);
-        poseStack.scale(scale, scale, 1.0f);
-        poseStack.translate(-drawX, -drawY, 0);
-
-        float halfSize = DIAMOND_SIZE_CLOSE / 2.0f;
         drawDiamond(graphics, drawX, drawY, halfSize, fadedColor);
 
         String nameText = wp.getName();
@@ -569,34 +585,44 @@ public final class WaypointRenderer {
         int nameWidth = font.width(nameText);
         int distWidth = font.width(distText);
 
-        int nameGap = 12;
-        int distGap = 4;
+        // 文字随菱形一起从标记中心向外缩放，锚点/间距基准与正常渲染一致（间距含准星缩放与淡入淡出进度）
+        float textScale = halfSize / (DIAMOND_SIZE_CLOSE / 2.0f);
+        float invScale = 1.0f / textScale;
+        float gapProgress = (anim.baseSize - DIAMOND_SIZE_FAR) / (DIAMOND_SIZE_CLOSE - DIAMOND_SIZE_FAR);
+        float nameGap = (8.0f + (12.0f - 8.0f) * gapProgress) * anim.progress * anim.crosshairScale * scaleCurve;
+        float distGap = (2.0f + (4.0f - 2.0f) * gapProgress) * anim.progress * anim.crosshairScale * scaleCurve;
 
-        float nameScreenX = drawX - nameWidth / 2.0f;
-        float distScreenX = drawX - distWidth / 2.0f;
-        float nameScreenY = drawY - halfSize - nameGap;
-        float distScreenY = drawY + halfSize + distGap;
+        // 目标世界坐标换算到文字缩放坐标系内，缩放后仍落在预期位置
+        float namePoseX = drawX - nameWidth / 2.0f;
+        float namePoseY = drawY - (halfSize + nameGap) * invScale;
+        float distPoseX = drawX - distWidth / 2.0f;
+        float distPoseY = drawY + (halfSize + distGap) * invScale;
 
-        int nameXI = (int) Math.floor(nameScreenX);
-        int nameYI = (int) Math.floor(nameScreenY);
-        float nameFracX = nameScreenX - nameXI;
-        float nameFracY = nameScreenY - nameYI;
+        PoseStack poseStack = graphics.pose();
+        poseStack.pushPose();
+        poseStack.translate(drawX, drawY, 0);
+        poseStack.scale(textScale, textScale, 1.0f);
+        poseStack.translate(-drawX, -drawY, 0);
 
-        int distXI = (int) Math.floor(distScreenX);
-        int distYI = (int) Math.floor(distScreenY);
-        float distFracX = distScreenX - distXI;
-        float distFracY = distScreenY - distYI;
+        int nameXI = (int) Math.floor(namePoseX);
+        int nameYI = (int) Math.floor(namePoseY);
+        float nameFracX = namePoseX - nameXI;
+        float nameFracY = namePoseY - nameYI;
 
-        PoseStack ps = graphics.pose();
-        ps.pushPose();
-        ps.translate(nameFracX, nameFracY, 0);
+        int distXI = (int) Math.floor(distPoseX);
+        int distYI = (int) Math.floor(distPoseY);
+        float distFracX = distPoseX - distXI;
+        float distFracY = distPoseY - distYI;
+
+        poseStack.pushPose();
+        poseStack.translate(nameFracX, nameFracY, 0);
         graphics.drawString(font, nameText, nameXI, nameYI, fadedNameColor);
-        ps.popPose();
+        poseStack.popPose();
 
-        ps.pushPose();
-        ps.translate(distFracX, distFracY, 0);
+        poseStack.pushPose();
+        poseStack.translate(distFracX, distFracY, 0);
         graphics.drawString(font, distText, distXI, distYI, fadedDistColor);
-        ps.popPose();
+        poseStack.popPose();
 
         poseStack.popPose();
     }
@@ -650,7 +676,14 @@ public final class WaypointRenderer {
         for (Waypoint wp : removed) {
             Vec3 rel = new Vec3(wp.getX() - camPos.x, wp.getY() - camPos.y, wp.getZ() - camPos.z);
             float distance = (float) rel.length();
-            dismissAnimations.put(wp.getId(), new DismissAnimation(wp, gameTime, distance));
+            // 在 render() 清理这些 map 之前捕获移除瞬间的实际渲染状态，消失动画从该状态继续播放，避免第一帧跳变
+            float targetBaseSize = distance <= DISTANCE_THRESHOLD ? DIAMOND_SIZE_CLOSE : DIAMOND_SIZE_FAR;
+            float baseSize = animatedSizes.getOrDefault(wp.getId(), targetBaseSize);
+            float crosshairScale = crosshairScales.getOrDefault(wp.getId(), 1.0f);
+            float progress = wp.getMaxRenderDistance() > 0
+                    ? visibilityProgress.getOrDefault(wp.getId(), 0.0f)
+                    : 1.0f;
+            dismissAnimations.put(wp.getId(), new DismissAnimation(wp, gameTime, distance, baseSize, crosshairScale, progress));
         }
     }
 
